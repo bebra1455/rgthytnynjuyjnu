@@ -16,6 +16,11 @@ local SCRIPT_VERSION = "Admin"
 local IS_ADMIN = (SCRIPT_VERSION == "Admin")
 local IS_PREMIUM = (SCRIPT_VERSION == "Premium") or IS_ADMIN
 
+-- Проверка: MM2 или MMV
+local MM2_PLACE_ID = 142823291
+local MMV_PLACE_ID = 116924926476457
+local IS_MM_GAME = (game.PlaceId == MM2_PLACE_ID) or (game.PlaceId == MMV_PLACE_ID)
+
 local function HasAccess(level)
     if level == nil or level == "user" then return true end
     if level == "premium" then return IS_PREMIUM end
@@ -532,12 +537,27 @@ CardsGrid:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
     CardsScroll.CanvasSize = UDim2.new(0, 0, 0, CardsGrid.AbsoluteContentSize.Y + 10)
 end)
 
-local Remotes = ReplicatedStorage:WaitForChild("Remotes")
-local GameplayRemotes = Remotes:WaitForChild("Gameplay")
-local GetCurrentPlayerData = GameplayRemotes:WaitForChild("GetCurrentPlayerData")
-local PlayerDataChanged = GameplayRemotes:WaitForChild("PlayerDataChanged")
-
+-- Безопасный доступ к Remotes (только в MM2/MMV)
 local PlayerData = {}
+local GameplayRemotes = nil
+local GetCurrentPlayerData = nil
+local PlayerDataChanged = nil
+
+if IS_MM_GAME then
+    local ok, remotes = pcall(function()
+        return ReplicatedStorage:WaitForChild("Remotes", 10)
+    end)
+    if ok and remotes then
+        local ok2, gameplay = pcall(function()
+            return remotes:WaitForChild("Gameplay", 10)
+        end)
+        if ok2 and gameplay then
+            GameplayRemotes = gameplay
+            GetCurrentPlayerData = gameplay:WaitForChild("GetCurrentPlayerData", 10)
+            PlayerDataChanged = gameplay:WaitForChild("PlayerDataChanged", 10)
+        end
+    end
+end
 
 local function GetRoleFromInfo(info)
     if not info then return nil end
@@ -554,6 +574,7 @@ local function UpdatePlayerData(newData)
 end
 
 local function FetchPlayerData()
+    if not GetCurrentPlayerData then return end
     task.spawn(function()
         local ok, data = pcall(function()
             return GetCurrentPlayerData:InvokeServer()
@@ -564,35 +585,44 @@ local function FetchPlayerData()
     end)
 end
 
-FetchPlayerData()
+if IS_MM_GAME and GetCurrentPlayerData then
+    FetchPlayerData()
+end
 
-PlayerDataChanged.OnClientEvent:Connect(function(newData)
-    if type(newData) == "table" then
-        UpdatePlayerData(newData)
-    else
-        FetchPlayerData()
-    end
-end)
-
-for _, remoteName in ipairs({"RoleSelect", "ShowRoleSelect", "ShowRoleSelectNew", "RoundStart"}) do
-    local remote = GameplayRemotes:FindFirstChild(remoteName)
-    if remote then
-        remote.OnClientEvent:Connect(function()
-            task.wait(0.05)
+if IS_MM_GAME and PlayerDataChanged then
+    PlayerDataChanged.OnClientEvent:Connect(function(newData)
+        if type(newData) == "table" then
+            UpdatePlayerData(newData)
+        else
             FetchPlayerData()
+        end
+    end)
+end
+
+if IS_MM_GAME and GameplayRemotes then
+    for _, remoteName in ipairs({"RoleSelect", "ShowRoleSelect", "ShowRoleSelectNew", "RoundStart"}) do
+        local remote = GameplayRemotes:FindFirstChild(remoteName)
+        if remote then
+            remote.OnClientEvent:Connect(function()
+                task.wait(0.05)
+                FetchPlayerData()
+            end)
+        end
+    end
+end
+
+if IS_MM_GAME and GameplayRemotes then
+    local RoundEndFade = GameplayRemotes:FindFirstChild("RoundEndFade")
+    if RoundEndFade then
+        RoundEndFade.OnClientEvent:Connect(function()
+            PlayerData = {}
         end)
     end
 end
 
-local RoundEndFade = GameplayRemotes:FindFirstChild("RoundEndFade")
-if RoundEndFade then
-    RoundEndFade.OnClientEvent:Connect(function()
-        PlayerData = {}
-    end)
-end
-
 local function GetPlayerRole(player)
     if not player then return "Lobby" end
+    if not IS_MM_GAME then return "Innocent" end
     local info = PlayerData[player.Name]
     if not info or type(info) ~= "table" then return "Lobby" end
     if info.Dead == true then return "Lobby" end
@@ -603,6 +633,10 @@ local function GetPlayerRole(player)
 end
 
 local function GetRoleColor(role)
+    -- Если игра не MM2/MMV — все фиолетовые
+    if not IS_MM_GAME then
+        return Color3.fromRGB(160, 90, 255)
+    end
     if role == "Murderer" then
         return Color3.fromRGB(230, 40, 40)
     elseif role == "Sheriff" then
@@ -623,7 +657,7 @@ local function CreateESP(player)
         ESPHighlights[player] = nil
     end
     local role = GetPlayerRole(player)
-    if role == "Lobby" then return end
+    if IS_MM_GAME and role == "Lobby" then return end
     local character = player.Character
     if not character then return end
     local h = Instance.new("Highlight")
@@ -700,7 +734,7 @@ RunService.Heartbeat:Connect(function()
         if player ~= LocalPlayer and player.Character then
             local role = GetPlayerRole(player)
             local existing = ESPHighlights[player]
-            if role == "Lobby" then
+            if IS_MM_GAME and role == "Lobby" then
                 if existing then
                     existing:Destroy()
                     ESPHighlights[player] = nil
@@ -738,6 +772,7 @@ end)
 local NotifiedPlayers = { Murderer = {}, Sheriff = {} }
 
 RunService.Heartbeat:Connect(function()
+    if not IS_MM_GAME then return end
     if not Settings.MurderNotification and not Settings.SheriffNotification then return end
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer then
@@ -754,12 +789,14 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
-local RoundEndFadeReset = GameplayRemotes:FindFirstChild("RoundEndFade")
-if RoundEndFadeReset then
-    RoundEndFadeReset.OnClientEvent:Connect(function()
-        NotifiedPlayers.Murderer = {}
-        NotifiedPlayers.Sheriff = {}
-    end)
+if IS_MM_GAME and GameplayRemotes then
+    local RoundEndFadeReset = GameplayRemotes:FindFirstChild("RoundEndFade")
+    if RoundEndFadeReset then
+        RoundEndFadeReset.OnClientEvent:Connect(function()
+            NotifiedPlayers.Murderer = {}
+            NotifiedPlayers.Sheriff = {}
+        end)
+    end
 end
 
 for _, player in pairs(Players:GetPlayers()) do
@@ -1434,6 +1471,9 @@ local function ToggleParticles(enabled)
     end
 end
 
+-- ============================================================
+-- AUTO GUN LOOTER (работает только в MM2/MMV)
+-- ============================================================
 local GunLooterConnection = nil
 local LastLootTime = 0
 local LOOT_COOLDOWN = 0.15
@@ -1560,6 +1600,7 @@ local function FindNearestGunFromCache()
 end
 
 local function ToggleAutoGunLooter(enabled)
+    if not IS_MM_GAME then return end
     if not HasAccess("premium") then return end
     Settings.AutoGunLooter = enabled
     if enabled then
@@ -1591,6 +1632,9 @@ local function ToggleAutoGunLooter(enabled)
     end
 end
 
+-- ============================================================
+-- KILL ALL (только MM2/MMV)
+-- ============================================================
 local KillAllRunning = false
 
 local function GetKnifeTool(char)
@@ -1628,6 +1672,7 @@ local function GetTargetsForKillAll()
 end
 
 local function RunKillAll()
+    if not IS_MM_GAME then return end
     if not HasAccess("premium") then return end
     if KillAllRunning then return end
     KillAllRunning = true
@@ -1661,6 +1706,7 @@ local function RunKillAll()
 end
 
 local function ToggleKillAll(enabled)
+    if not IS_MM_GAME then return end
     if not HasAccess("premium") then return end
     Settings.KillAll = enabled
     if enabled then
@@ -1673,6 +1719,9 @@ local function ToggleKillAll(enabled)
     end
 end
 
+-- ============================================================
+-- CHOOSE MAP 100x (только MM2/MMV)
+-- ============================================================
 local ChooseMapRunning = false
 
 local function FindAllVotePads()
@@ -1914,6 +1963,7 @@ local function OpenChooseMapSelector()
 end
 
 local function Toggle100ChooseMap(enabled)
+    if not IS_MM_GAME then return end
     Settings.ChooseMap100 = enabled
     if enabled then
         OpenChooseMapSelector()
@@ -2062,7 +2112,7 @@ local function ToggleAimBot(enabled)
                     local rp = player.Character:FindFirstChild("HumanoidRootPart")
                     if h and rp and h.Health > 0 then
                         local skip = false
-                        if Settings.AimBotOnlyMurderer then
+                        if IS_MM_GAME and Settings.AimBotOnlyMurderer then
                             if GetPlayerRole(player) ~= "Murderer" then skip = true end
                         end
                         if not skip then
@@ -2353,18 +2403,36 @@ local function CreateBindCard(category, name, callback, accessLevel)
     return card
 end
 
-CreateCard("Main", "AutoGunLooter", false, ToggleAutoGunLooter, "premium")
-CreateCard("Main", "KillAll", false, ToggleKillAll, "premium")
-CreateCard("ChooseMap", "100 Choose Map", false, Toggle100ChooseMap, "admin")
+-- ============================================================
+-- КАРТОЧКИ (с проверкой IS_MM_GAME)
+-- ============================================================
+
+-- Main: AutoGunLooter и KillAll только для MM2/MMV
+if IS_MM_GAME then
+    CreateCard("Main", "AutoGunLooter", false, ToggleAutoGunLooter, "premium")
+    CreateCard("Main", "KillAll", false, ToggleKillAll, "premium")
+end
+
+-- ChooseMap только для MM2/MMV
+if IS_MM_GAME then
+    CreateCard("ChooseMap", "100 Choose Map", false, Toggle100ChooseMap, "admin")
+end
+
+-- Legit
 CreateCard("Legit", "AimBot", false, ToggleAimBot)
-CreateCard("Legit", "AimBot Only Murderer", false, function(s) Settings.AimBotOnlyMurderer = s end)
+if IS_MM_GAME then
+    CreateCard("Legit", "AimBot Only Murderer", false, function(s) Settings.AimBotOnlyMurderer = s end)
+end
 CreateCard("Legit", "AimBot Wall Check", true, function(s) Settings.AimBotWallCheck = s end)
 CreateSliderCard("Legit", "AimBot FOV", 50, 300, 100, function(v) Settings.AimBotFOV = v FOVCircle.Radius = v end)
 CreateSliderCard("Legit", "AimBot Prediction", 0, 100, 50, function(v) Settings.AimBotPrediction = v end)
 CreateCard("Legit", "Lock Mouse", false, ToggleLockMouse)
+
+-- Rage
 CreateCard("Rage", "Fly", false, ToggleFly)
 CreateCard("Rage", "NoClip", false, ToggleNoClip)
 
+-- Visuals
 CreateCard("Visuals", "Player ESP", false, function(s)
     Settings.PlayerESP = s
     if s then UpdateAllVisuals() else ClearAllESP() end
@@ -2398,15 +2466,19 @@ CreateSliderCard("Visuals", "Aura Type (1=Fire 2=Ice 3=Bolt)", 1, 3, 1, function
 end)
 CreateCard("Visuals", "Particles", false, ToggleParticles)
 
-CreateCard("WebHook", "MurderNotification", false, function(s)
-    Settings.MurderNotification = s
-    if not s then NotifiedPlayers.Murderer = {} end
-end)
-CreateCard("WebHook", "SheriffNotification", false, function(s)
-    Settings.SheriffNotification = s
-    if not s then NotifiedPlayers.Sheriff = {} end
-end)
+-- WebHook: уведомления только для MM2/MMV
+if IS_MM_GAME then
+    CreateCard("WebHook", "MurderNotification", false, function(s)
+        Settings.MurderNotification = s
+        if not s then NotifiedPlayers.Murderer = {} end
+    end)
+    CreateCard("WebHook", "SheriffNotification", false, function(s)
+        Settings.SheriffNotification = s
+        if not s then NotifiedPlayers.Sheriff = {} end
+    end)
+end
 
+-- Binds
 CreateBindCard("Binds", "Fly Key", function(key) Settings.FlyKey = key end)
 CreateBindCard("Binds", "NoClip Key", function(key) Settings.NoClipKey = key end)
 CreateBindCard("Binds", "AimBot Key", function(key) Settings.AimBotKey = key end)
@@ -2461,8 +2533,11 @@ local function CreateCategoryButton(name)
     return btn
 end
 
+-- Кнопка ChooseMap только для MM2/MMV
 CreateCategoryButton("Main")
-CreateCategoryButton("ChooseMap")
+if IS_MM_GAME then
+    CreateCategoryButton("ChooseMap")
+end
 CreateCategoryButton("Legit")
 CreateCategoryButton("Rage")
 CreateCategoryButton("Visuals")
@@ -2539,9 +2614,6 @@ end
 
 ExitButton.MouseButton1Click:Connect(CloseGUI)
 
--- ============================================================
--- OPEN MODE (только Admin) — кнопка на экране или RightShift
--- ============================================================
 local OpenModeButton = Instance.new("TextButton")
 OpenModeButton.Name = "MegolaHub_ToggleButton"
 OpenModeButton.Size = UDim2.new(0, 130, 0, 40)
@@ -2640,4 +2712,4 @@ CreateSliderCard("Visuals", "Open Mode (1=Key 2=Button)", 1, 2, 1, function(v)
     end
 end, "admin")
 
-print("MegolaHub ADMIN загружен! RightShift или кнопка для открытия GUI.")
+print("MegolaHub ADMIN загружен! RightShift или кнопка для открытия GUI. MM-игра: " .. tostring(IS_MM_GAME))
