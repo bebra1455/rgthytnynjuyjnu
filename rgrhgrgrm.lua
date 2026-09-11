@@ -16,7 +16,6 @@ local SCRIPT_VERSION = "Admin"
 local IS_ADMIN = (SCRIPT_VERSION == "Admin")
 local IS_PREMIUM = (SCRIPT_VERSION == "Premium") or IS_ADMIN
 
--- Проверка: MM2 или MMV
 local MM2_PLACE_ID = 142823291
 local MMV_PLACE_ID = 116924926476457
 local IS_MM_GAME = (game.PlaceId == MM2_PLACE_ID) or (game.PlaceId == MMV_PLACE_ID)
@@ -28,6 +27,24 @@ local function HasAccess(level)
     return false
 end
 
+-- ============================================================
+-- ГРАДИЕНТ-ПАЛИТРА (12 цветов)
+-- ============================================================
+local GradientPalette = {
+    [1]  = Color3.fromRGB(255, 80, 80),
+    [2]  = Color3.fromRGB(255, 150, 60),
+    [3]  = Color3.fromRGB(255, 215, 0),
+    [4]  = Color3.fromRGB(255, 255, 100),
+    [5]  = Color3.fromRGB(80, 220, 120),
+    [6]  = Color3.fromRGB(80, 220, 200),
+    [7]  = Color3.fromRGB(90, 180, 255),
+    [8]  = Color3.fromRGB(90, 130, 255),
+    [9]  = Color3.fromRGB(160, 90, 255),
+    [10] = Color3.fromRGB(255, 120, 200),
+    [11] = Color3.fromRGB(255, 255, 255),
+    [12] = Color3.fromRGB(40, 40, 50),
+}
+
 local Settings = {
     AutoGunLooter = false,
     KillAll = false,
@@ -35,6 +52,7 @@ local Settings = {
     SelectedMap = nil,
     PlayerESP = false,
     NameTags = false,
+    SeeInvisibles = false,
     Fly = false,
     NoClip = false,
     AimBot = false,
@@ -57,6 +75,8 @@ local Settings = {
     LockMouseKey = nil,
     NoClipKey = nil,
     OpenMode = "Key",
+    GradientColor1 = 7,
+    GradientColor2 = 9,
 }
 
 local Colors = {
@@ -289,22 +309,10 @@ HubTitleLabel.TextXAlignment = Enum.TextXAlignment.Left
 HubTitleLabel.Parent = Sidebar
 
 local HubTitleGradient = Instance.new("UIGradient")
-if IS_ADMIN then
-    HubTitleGradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 80, 80)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 180, 60)),
-    })
-elseif IS_PREMIUM then
-    HubTitleGradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 215, 0)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(200, 100, 255)),
-    })
-else
-    HubTitleGradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(90, 180, 255)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(180, 90, 255)),
-    })
-end
+HubTitleGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, GradientPalette[Settings.GradientColor1]),
+    ColorSequenceKeypoint.new(1, GradientPalette[Settings.GradientColor2]),
+})
 HubTitleGradient.Rotation = 0
 HubTitleGradient.Parent = HubTitleLabel
 
@@ -537,7 +545,6 @@ CardsGrid:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
     CardsScroll.CanvasSize = UDim2.new(0, 0, 0, CardsGrid.AbsoluteContentSize.Y + 10)
 end)
 
--- Безопасный доступ к Remotes (только в MM2/MMV)
 local PlayerData = {}
 local GameplayRemotes = nil
 local GetCurrentPlayerData = nil
@@ -564,7 +571,8 @@ local function GetRoleFromInfo(info)
     local role = tostring(info.Role or ""):lower()
     if role:find("murder") or role:find("killer") then return "Murderer" end
     if role:find("sheriff") or role:find("police") then return "Sheriff" end
-    if role:find("hero") or role:find("innocent") or role:find("civilian") then return "Innocent" end
+    if role:find("hero") then return "Hero" end
+    if role:find("innocent") or role:find("civilian") then return "Innocent" end
     return nil
 end
 
@@ -633,7 +641,6 @@ local function GetPlayerRole(player)
 end
 
 local function GetRoleColor(role)
-    -- Если игра не MM2/MMV — все фиолетовые
     if not IS_MM_GAME then
         return Color3.fromRGB(160, 90, 255)
     end
@@ -641,6 +648,8 @@ local function GetRoleColor(role)
         return Color3.fromRGB(230, 40, 40)
     elseif role == "Sheriff" then
         return Color3.fromRGB(40, 120, 255)
+    elseif role == "Hero" then
+        return Color3.fromRGB(255, 215, 0)
     elseif role == "Innocent" then
         return Color3.fromRGB(0, 220, 40)
     else
@@ -648,6 +657,122 @@ local function GetRoleColor(role)
     end
 end
 
+-- ============================================================
+-- HERO DETECTION (проверка по инвентарю)
+-- ============================================================
+local function IsSheriffDead()
+    if not IS_MM_GAME then return false end
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local info = PlayerData[player.Name]
+            if info and type(info) == "table" then
+                local role = tostring(info.Role or ""):lower()
+                if role:find("sheriff") or role:find("police") then
+                    if info.Dead ~= true then
+                        return false
+                    end
+                end
+            end
+        end
+    end
+    return true
+end
+
+local function PlayerHasGun(player)
+    local char = player.Character
+    if not char then return false end
+    local backpack = player:FindFirstChild("Backpack")
+    local function checkContainer(container)
+        if not container then return false end
+        for _, tool in pairs(container:GetChildren()) do
+            if tool:IsA("Tool") then
+                local n = tool.Name:lower()
+                if n:find("gun") or n:find("revolver") or n:find("pistol") or n:find("sheriff") then
+                    return true
+                end
+            end
+        end
+        return false
+    end
+    return checkContainer(char) or checkContainer(backpack)
+end
+
+local function IsHero(player)
+    if not IS_MM_GAME then return false end
+    local role = GetPlayerRole(player)
+    if role == "Sheriff" or role == "Murderer" then return false end
+    if not IsSheriffDead() then return false end
+    if not PlayerHasGun(player) then return false end
+    return true
+end
+
+-- ============================================================
+-- SEE INVISIBLES
+-- ============================================================
+local InvisibleHighlights = {}
+
+local function IsCharacterInvisible(player)
+    local char = player.Character
+    if not char then return false end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return false end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then return false end
+    local invisibleCount = 0
+    local totalCount = 0
+    for _, part in pairs(char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            totalCount = totalCount + 1
+            if part.Transparency >= 0.9 or part.LocalTransparencyModifier >= 0.9 then
+                invisibleCount = invisibleCount + 1
+            end
+        end
+    end
+    if totalCount == 0 then return false end
+    return invisibleCount / totalCount >= 0.8
+end
+
+local function UpdateInvisibleESP()
+    if not Settings.SeeInvisibles then return end
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local invisible = IsCharacterInvisible(player)
+            local existing = InvisibleHighlights[player]
+            if invisible then
+                if not existing or not existing.Parent then
+                    local h = Instance.new("Highlight")
+                    h.Name = "InvisibleHighlight"
+                    h.FillColor = Color3.fromRGB(255, 255, 255)
+                    h.FillTransparency = 0.6
+                    h.OutlineColor = Color3.fromRGB(255, 255, 255)
+                    h.OutlineTransparency = 0
+                    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                    h.Adornee = player.Character
+                    h.Parent = player.Character
+                    InvisibleHighlights[player] = h
+                else
+                    existing.Adornee = player.Character
+                end
+            else
+                if existing then
+                    existing:Destroy()
+                    InvisibleHighlights[player] = nil
+                end
+            end
+        end
+    end
+end
+
+local function ClearAllInvisibleESP()
+    for _, h in pairs(InvisibleHighlights) do
+        if h then h:Destroy() end
+    end
+    InvisibleHighlights = {}
+end
+
+-- ============================================================
+-- ESP + NAMETAGS
+-- ============================================================
 local ESPHighlights = {}
 local NameTagGuis = {}
 
@@ -656,15 +781,22 @@ local function CreateESP(player)
         ESPHighlights[player]:Destroy()
         ESPHighlights[player] = nil
     end
+    if Settings.SeeInvisibles and IsCharacterInvisible(player) then
+        return
+    end
     local role = GetPlayerRole(player)
     if IS_MM_GAME and role == "Lobby" then return end
     local character = player.Character
     if not character then return end
+    local color = GetRoleColor(role)
+    if IS_MM_GAME and IsHero(player) then
+        color = GetRoleColor("Hero")
+    end
     local h = Instance.new("Highlight")
     h.Name = "ESP_Highlight"
-    h.FillColor = GetRoleColor(role)
+    h.FillColor = color
     h.FillTransparency = 0.7
-    h.OutlineColor = GetRoleColor(role)
+    h.OutlineColor = color
     h.OutlineTransparency = 0
     h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     h.Adornee = character
@@ -687,22 +819,61 @@ local function CreateNameTag(player)
     if not root then return end
     local b = Instance.new("BillboardGui")
     b.Name = "NameTag_GUI"
-    b.Size = UDim2.new(0, 150, 0, 30)
-    b.StudsOffset = Vector3.new(0, 3, 0)
+    b.Size = UDim2.new(0, 200, 0, 50)
+    b.StudsOffset = Vector3.new(0, 3.5, 0)
     b.AlwaysOnTop = true
     b.MaxDistance = 300
     b.Adornee = root
     b.Parent = root
-    local t = Instance.new("TextLabel")
-    t.Size = UDim2.new(1, 0, 1, 0)
-    t.BackgroundTransparency = 1
-    t.Text = player.Name
-    t.TextColor3 = Color3.fromRGB(255, 255, 255)
-    t.TextStrokeTransparency = 0
-    t.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-    t.Font = Enum.Font.GothamBold
-    t.TextSize = 14
-    t.Parent = b
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Name = "NameLabel"
+    nameLabel.Size = UDim2.new(1, 0, 0, 18)
+    nameLabel.Position = UDim2.new(0, 0, 0, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = player.Name
+    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    nameLabel.TextStrokeTransparency = 0
+    nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.TextSize = 14
+    nameLabel.Parent = b
+
+    local role = GetPlayerRole(player)
+    local roleColor = GetRoleColor(role)
+    local roleText = role
+    if IS_MM_GAME and IsHero(player) then
+        roleText = "Hero"
+        roleColor = GetRoleColor("Hero")
+    end
+
+    local roleLabel = Instance.new("TextLabel")
+    roleLabel.Name = "RoleLabel"
+    roleLabel.Size = UDim2.new(1, 0, 0, 14)
+    roleLabel.Position = UDim2.new(0, 0, 0, 17)
+    roleLabel.BackgroundTransparency = 1
+    roleLabel.Text = roleText
+    roleLabel.TextColor3 = roleColor
+    roleLabel.TextStrokeTransparency = 0
+    roleLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    roleLabel.Font = Enum.Font.GothamSemibold
+    roleLabel.TextSize = 12
+    roleLabel.Parent = b
+
+    local invisLabel = Instance.new("TextLabel")
+    invisLabel.Name = "InvisLabel"
+    invisLabel.Size = UDim2.new(1, 0, 0, 14)
+    invisLabel.Position = UDim2.new(0, 0, 0, 31)
+    invisLabel.BackgroundTransparency = 1
+    invisLabel.Text = "Invisible"
+    invisLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    invisLabel.TextStrokeTransparency = 0
+    invisLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    invisLabel.Font = Enum.Font.GothamBold
+    invisLabel.TextSize = 12
+    invisLabel.Visible = false
+    invisLabel.Parent = b
+
     NameTagGuis[player] = b
 end
 
@@ -724,30 +895,61 @@ local function UpdateAllVisuals()
     end
 end
 
+-- Heartbeat для обновления ESP + Nametag ролей + Invisible
 local lastRoleCheck = 0
 RunService.Heartbeat:Connect(function()
-    if not Settings.PlayerESP then return end
+    if not Settings.PlayerESP and not Settings.NameTags and not Settings.SeeInvisibles then return end
     local now = tick()
-    if now - lastRoleCheck < 0.03 then return end
+    if now - lastRoleCheck < 0.1 then return end
     lastRoleCheck = now
+
+    if Settings.SeeInvisibles then
+        UpdateInvisibleESP()
+    end
+
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
             local role = GetPlayerRole(player)
-            local existing = ESPHighlights[player]
-            if IS_MM_GAME and role == "Lobby" then
-                if existing then
-                    existing:Destroy()
-                    ESPHighlights[player] = nil
-                end
-            else
-                local color = GetRoleColor(role)
-                if existing then
-                    if existing.FillColor ~= color then
-                        existing.FillColor = color
-                        existing.OutlineColor = color
-                    end
+            local hero = IS_MM_GAME and IsHero(player)
+            local invisible = Settings.SeeInvisibles and IsCharacterInvisible(player)
+
+            if Settings.PlayerESP then
+                local existing = ESPHighlights[player]
+                if (IS_MM_GAME and role == "Lobby") and not invisible then
+                    if existing then existing:Destroy() ESPHighlights[player] = nil end
+                elseif invisible then
+                    if existing then existing:Destroy() ESPHighlights[player] = nil end
                 else
-                    CreateESP(player)
+                    local color = hero and GetRoleColor("Hero") or GetRoleColor(role)
+                    if existing then
+                        if existing.FillColor ~= color then
+                            existing.FillColor = color
+                            existing.OutlineColor = color
+                        end
+                    else
+                        CreateESP(player)
+                    end
+                end
+            end
+
+            if Settings.NameTags then
+                local gui = NameTagGuis[player]
+                if not gui or not gui.Parent then
+                    CreateNameTag(player)
+                    gui = NameTagGuis[player]
+                end
+                if gui then
+                    local roleLabel = gui:FindFirstChild("RoleLabel")
+                    local invisLabel = gui:FindFirstChild("InvisLabel")
+                    if roleLabel then
+                        local roleText = hero and "Hero" or role
+                        local roleColor = hero and GetRoleColor("Hero") or GetRoleColor(role)
+                        if roleLabel.Text ~= roleText then roleLabel.Text = roleText end
+                        if roleLabel.TextColor3 ~= roleColor then roleLabel.TextColor3 = roleColor end
+                    end
+                    if invisLabel then
+                        invisLabel.Visible = invisible
+                    end
                 end
             end
         end
@@ -755,7 +957,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 local function OnCharacterAdded(player, character)
-    task.wait(0.1)
+    task.wait(0.2)
     if player ~= LocalPlayer then
         if Settings.PlayerESP then CreateESP(player) end
         if Settings.NameTags then CreateNameTag(player) end
@@ -1470,9 +1672,8 @@ local function ToggleParticles(enabled)
         ClearParticles()
     end
 end
-
 -- ============================================================
--- AUTO GUN LOOTER (работает только в MM2/MMV)
+-- AUTO GUN LOOTER (только MM2/MMV)
 -- ============================================================
 local GunLooterConnection = nil
 local LastLootTime = 0
@@ -2087,7 +2288,7 @@ FOVCircle.Visible = false
 FOVCircle.Filled = false
 
 local AimBotConnection
-local function IsVisible(targetPart)
+local function IsVisibleCheck(targetPart)
     if not Settings.AimBotWallCheck then return true end
     local origin = Camera.CFrame.Position
     local dir = (targetPart.Position - origin)
@@ -2116,7 +2317,7 @@ local function ToggleAimBot(enabled)
                             if GetPlayerRole(player) ~= "Murderer" then skip = true end
                         end
                         if not skip then
-                            if IsVisible(rp) then
+                            if IsVisibleCheck(rp) then
                                 local sp, onScreen = Camera:WorldToScreenPoint(rp.Position)
                                 if onScreen then
                                     local d = (Vector2.new(sp.X, sp.Y) - Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)).Magnitude
@@ -2143,6 +2344,9 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
+-- ============================================================
+-- СИСТЕМА КАРТОЧЕК
+-- ============================================================
 local AllCards = {}
 
 local function ApplyCardGradient(card)
@@ -2404,21 +2608,15 @@ local function CreateBindCard(category, name, callback, accessLevel)
 end
 
 -- ============================================================
--- КАРТОЧКИ (с проверкой IS_MM_GAME)
+-- СОЗДАНИЕ КАРТОЧЕК
 -- ============================================================
 
--- Main: AutoGunLooter и KillAll только для MM2/MMV
 if IS_MM_GAME then
     CreateCard("Main", "AutoGunLooter", false, ToggleAutoGunLooter, "premium")
     CreateCard("Main", "KillAll", false, ToggleKillAll, "premium")
-end
-
--- ChooseMap только для MM2/MMV
-if IS_MM_GAME then
     CreateCard("ChooseMap", "100 Choose Map", false, Toggle100ChooseMap, "admin")
 end
 
--- Legit
 CreateCard("Legit", "AimBot", false, ToggleAimBot)
 if IS_MM_GAME then
     CreateCard("Legit", "AimBot Only Murderer", false, function(s) Settings.AimBotOnlyMurderer = s end)
@@ -2427,12 +2625,9 @@ CreateCard("Legit", "AimBot Wall Check", true, function(s) Settings.AimBotWallCh
 CreateSliderCard("Legit", "AimBot FOV", 50, 300, 100, function(v) Settings.AimBotFOV = v FOVCircle.Radius = v end)
 CreateSliderCard("Legit", "AimBot Prediction", 0, 100, 50, function(v) Settings.AimBotPrediction = v end)
 CreateCard("Legit", "Lock Mouse", false, ToggleLockMouse)
-
--- Rage
 CreateCard("Rage", "Fly", false, ToggleFly)
 CreateCard("Rage", "NoClip", false, ToggleNoClip)
 
--- Visuals
 CreateCard("Visuals", "Player ESP", false, function(s)
     Settings.PlayerESP = s
     if s then UpdateAllVisuals() else ClearAllESP() end
@@ -2440,6 +2635,10 @@ end)
 CreateCard("Visuals", "NameTags", false, function(s)
     Settings.NameTags = s
     if s then UpdateAllVisuals() else ClearAllNameTags() end
+end)
+CreateCard("Visuals", "SeeInvisibles", false, function(s)
+    Settings.SeeInvisibles = s
+    if not s then ClearAllInvisibleESP() end
 end)
 CreateCard("Visuals", "Ambience", false, function(s)
     Settings.Ambience = s
@@ -2466,7 +2665,24 @@ CreateSliderCard("Visuals", "Aura Type (1=Fire 2=Ice 3=Bolt)", 1, 3, 1, function
 end)
 CreateCard("Visuals", "Particles", false, ToggleParticles)
 
--- WebHook: уведомления только для MM2/MMV
+-- ChangeGradient
+CreateSliderCard("Visuals", "ChangeGradient Color1 (1-12)", 1, 12, 7, function(v)
+    local idx = math.clamp(math.floor(v), 1, 12)
+    Settings.GradientColor1 = idx
+    HubTitleGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, GradientPalette[Settings.GradientColor1]),
+        ColorSequenceKeypoint.new(1, GradientPalette[Settings.GradientColor2]),
+    })
+end)
+CreateSliderCard("Visuals", "ChangeGradient Color2 (1-12)", 1, 12, 9, function(v)
+    local idx = math.clamp(math.floor(v), 1, 12)
+    Settings.GradientColor2 = idx
+    HubTitleGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, GradientPalette[Settings.GradientColor1]),
+        ColorSequenceKeypoint.new(1, GradientPalette[Settings.GradientColor2]),
+    })
+end)
+
 if IS_MM_GAME then
     CreateCard("WebHook", "MurderNotification", false, function(s)
         Settings.MurderNotification = s
@@ -2478,12 +2694,14 @@ if IS_MM_GAME then
     end)
 end
 
--- Binds
 CreateBindCard("Binds", "Fly Key", function(key) Settings.FlyKey = key end)
 CreateBindCard("Binds", "NoClip Key", function(key) Settings.NoClipKey = key end)
 CreateBindCard("Binds", "AimBot Key", function(key) Settings.AimBotKey = key end)
 CreateBindCard("Binds", "Lock Mouse Key", function(key) Settings.LockMouseKey = key end)
 
+-- ============================================================
+-- КАТЕГОРИИ
+-- ============================================================
 local CurrentCategory = "Main"
 local CategoryButtons = {}
 
@@ -2533,7 +2751,6 @@ local function CreateCategoryButton(name)
     return btn
 end
 
--- Кнопка ChooseMap только для MM2/MMV
 CreateCategoryButton("Main")
 if IS_MM_GAME then
     CreateCategoryButton("ChooseMap")
@@ -2712,4 +2929,4 @@ CreateSliderCard("Visuals", "Open Mode (1=Key 2=Button)", 1, 2, 1, function(v)
     end
 end, "admin")
 
-print("MegolaHub ADMIN загружен! RightShift или кнопка для открытия GUI. MM-игра: " .. tostring(IS_MM_GAME))
+print("MegolaHub ADMIN загружен! MM-игра: " .. tostring(IS_MM_GAME))
