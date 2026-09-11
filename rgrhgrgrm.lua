@@ -1,6 +1,6 @@
 --[[
     MegolaHub | MM2 Script - ADMIN VERSION
-    GUI: RightShift
+    GUI: RightShift or On-screen Button
 ]]
 
 local Players = game:GetService("Players")
@@ -51,6 +51,7 @@ local Settings = {
     AimBotKey = nil,
     LockMouseKey = nil,
     NoClipKey = nil,
+    OpenMode = "Key",
 }
 
 local Colors = {
@@ -2538,11 +2539,105 @@ end
 
 ExitButton.MouseButton1Click:Connect(CloseGUI)
 
-UserInputService.InputBegan:Connect(function(input, gp)
-    if gp then return end
-    if input.KeyCode == Enum.KeyCode.RightShift then
-        if isOpen then CloseGUI() else OpenGUI() end
+-- ============================================================
+-- OPEN MODE (только Admin) — кнопка на экране или RightShift
+-- ============================================================
+local OpenModeButton = Instance.new("TextButton")
+OpenModeButton.Name = "MegolaHub_ToggleButton"
+OpenModeButton.Size = UDim2.new(0, 130, 0, 40)
+OpenModeButton.Position = UDim2.new(0, 20, 0.5, -20)
+OpenModeButton.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
+OpenModeButton.BackgroundTransparency = 0.1
+OpenModeButton.BorderSizePixel = 0
+OpenModeButton.Text = ""
+OpenModeButton.AutoButtonColor = false
+OpenModeButton.Visible = false
+OpenModeButton.Active = true
+OpenModeButton.Draggable = true
+OpenModeButton.Parent = ScreenGui
+
+local ombCorner = Instance.new("UICorner")
+ombCorner.CornerRadius = UDim.new(0, 10)
+ombCorner.Parent = OpenModeButton
+
+local ombStroke = Instance.new("UIStroke")
+ombStroke.Color = Colors.AccentBlue
+ombStroke.Thickness = 1.5
+ombStroke.Transparency = 0.2
+ombStroke.Parent = OpenModeButton
+
+local ombGradient = Instance.new("UIGradient")
+ombGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(90, 130, 255)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(160, 90, 255)),
+})
+ombGradient.Rotation = 0
+ombGradient.Parent = ombStroke
+
+local ombLabel = Instance.new("TextLabel")
+ombLabel.Size = UDim2.new(1, -20, 0, 22)
+ombLabel.Position = UDim2.new(0, 10, 0, 4)
+ombLabel.BackgroundTransparency = 1
+ombLabel.Text = "MegolaHub"
+ombLabel.TextColor3 = Colors.Text
+ombLabel.Font = Enum.Font.GothamBlack
+ombLabel.TextSize = 15
+ombLabel.TextXAlignment = Enum.TextXAlignment.Center
+ombLabel.Parent = OpenModeButton
+
+local ombSubLabel = Instance.new("TextLabel")
+ombSubLabel.Size = UDim2.new(1, -20, 0, 12)
+ombSubLabel.Position = UDim2.new(0, 10, 0, 24)
+ombSubLabel.BackgroundTransparency = 1
+ombSubLabel.Text = "• ON •"
+ombSubLabel.TextColor3 = Colors.TextDim
+ombSubLabel.Font = Enum.Font.Gotham
+ombSubLabel.TextSize = 10
+ombSubLabel.TextXAlignment = Enum.TextXAlignment.Center
+ombSubLabel.Parent = OpenModeButton
+
+task.spawn(function()
+    while ombLabel.Parent do
+        for i = 0, 1, 0.02 do
+            if ombGradient then ombGradient.Offset = Vector2.new(i, 0) end
+            task.wait(0.03)
+        end
+        for i = 1, 0, -0.02 do
+            if ombGradient then ombGradient.Offset = Vector2.new(i, 0) end
+            task.wait(0.03)
+        end
     end
 end)
 
-print("MegolaHub ADMIN загружен! Нажмите RightShift для открытия GUI.")
+local function SetOpenMode(mode)
+    Settings.OpenMode = mode
+    if mode == "Button" then
+        OpenModeButton.Visible = true
+    else
+        OpenModeButton.Visible = false
+    end
+end
+
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if Settings.OpenMode ~= "Button" then
+        if input.KeyCode == Enum.KeyCode.RightShift then
+            if isOpen then CloseGUI() else OpenGUI() end
+        end
+    end
+end)
+
+OpenModeButton.MouseButton1Click:Connect(function()
+    if isOpen then CloseGUI() else OpenGUI() end
+end)
+
+CreateSliderCard("Visuals", "Open Mode (1=Key 2=Button)", 1, 2, 1, function(v)
+    local mode = math.clamp(math.floor(v), 1, 2)
+    if mode == 1 then
+        SetOpenMode("Key")
+    else
+        SetOpenMode("Button")
+    end
+end, "admin")
+
+print("MegolaHub ADMIN загружен! RightShift или кнопка для открытия GUI.")
