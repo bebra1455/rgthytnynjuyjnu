@@ -27,9 +27,6 @@ local function HasAccess(level)
     return false
 end
 
--- ============================================================
--- ГРАДИЕНТ-ПАЛИТРА (12 цветов)
--- ============================================================
 local GradientPalette = {
     [1]  = Color3.fromRGB(255, 80, 80),
     [2]  = Color3.fromRGB(255, 150, 60),
@@ -77,6 +74,7 @@ local Settings = {
     OpenMode = "Key",
     GradientColor1 = 7,
     GradientColor2 = 9,
+    CloseTab = false,
 }
 
 local Colors = {
@@ -93,6 +91,11 @@ local Colors = {
     Border = Color3.fromRGB(60, 60, 70),
     SearchBar = Color3.fromRGB(30, 30, 35),
 }
+
+-- Ранг для кнопки OpenMode
+local RankName = "Dev"
+local RankColor1 = Color3.fromRGB(255, 80, 80)
+local RankColor2 = Color3.fromRGB(150, 20, 20)
 
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "MegolaHub"
@@ -124,17 +127,14 @@ local function ShowNotification(title, text, iconColor)
     notif.BorderSizePixel = 0
     notif.Position = UDim2.new(1, 400, 0, 0)
     notif.Parent = NotifContainer
-    
     local nCorner = Instance.new("UICorner")
     nCorner.CornerRadius = UDim.new(0, 12)
     nCorner.Parent = notif
-    
     local nStroke = Instance.new("UIStroke")
     nStroke.Color = iconColor or Color3.fromRGB(90, 130, 255)
     nStroke.Thickness = 1.5
     nStroke.Transparency = 0.4
     nStroke.Parent = notif
-    
     local nGradient = Instance.new("UIGradient")
     nGradient.Color = ColorSequence.new({
         ColorSequenceKeypoint.new(0, Color3.fromRGB(38, 38, 50)),
@@ -142,18 +142,15 @@ local function ShowNotification(title, text, iconColor)
     })
     nGradient.Rotation = 45
     nGradient.Parent = notif
-    
     local sideBar = Instance.new("Frame")
     sideBar.Size = UDim2.new(0, 4, 1, -20)
     sideBar.Position = UDim2.new(0, 8, 0, 10)
     sideBar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     sideBar.BorderSizePixel = 0
     sideBar.Parent = notif
-    
     local sbCorner = Instance.new("UICorner")
     sbCorner.CornerRadius = UDim.new(1, 0)
     sbCorner.Parent = sideBar
-    
     local sbGradient = Instance.new("UIGradient")
     sbGradient.Color = ColorSequence.new({
         ColorSequenceKeypoint.new(0, iconColor or Color3.fromRGB(90, 130, 255)),
@@ -161,7 +158,6 @@ local function ShowNotification(title, text, iconColor)
     })
     sbGradient.Rotation = 90
     sbGradient.Parent = sideBar
-    
     local dotFrame = Instance.new("Frame")
     dotFrame.Size = UDim2.new(0, 28, 0, 28)
     dotFrame.Position = UDim2.new(0, 22, 0, 10)
@@ -169,16 +165,13 @@ local function ShowNotification(title, text, iconColor)
     dotFrame.BackgroundTransparency = 0.8
     dotFrame.BorderSizePixel = 0
     dotFrame.Parent = notif
-    
     local dotCorner = Instance.new("UICorner")
     dotCorner.CornerRadius = UDim.new(1, 0)
     dotCorner.Parent = dotFrame
-    
     local dotStroke = Instance.new("UIStroke")
     dotStroke.Color = iconColor or Color3.fromRGB(90, 130, 255)
     dotStroke.Thickness = 1.5
     dotStroke.Parent = dotFrame
-    
     local titleLabel = Instance.new("TextLabel")
     titleLabel.Size = UDim2.new(1, -70, 0, 20)
     titleLabel.Position = UDim2.new(0, 60, 0, 12)
@@ -189,7 +182,6 @@ local function ShowNotification(title, text, iconColor)
     titleLabel.TextSize = 13
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
     titleLabel.Parent = notif
-    
     local textLabel = Instance.new("TextLabel")
     textLabel.Size = UDim2.new(1, -70, 0, 22)
     textLabel.Position = UDim2.new(0, 60, 0, 32)
@@ -201,7 +193,6 @@ local function ShowNotification(title, text, iconColor)
     textLabel.TextXAlignment = Enum.TextXAlignment.Left
     textLabel.TextTruncate = Enum.TextTruncate.AtEnd
     textLabel.Parent = notif
-    
     local subLabel = Instance.new("TextLabel")
     subLabel.Size = UDim2.new(1, -70, 0, 14)
     subLabel.Position = UDim2.new(0, 60, 0, 56)
@@ -212,14 +203,12 @@ local function ShowNotification(title, text, iconColor)
     subLabel.TextSize = 10
     subLabel.TextXAlignment = Enum.TextXAlignment.Left
     subLabel.Parent = notif
-    
     notif.Position = UDim2.new(1, 400, 0, 0)
     notif.Rotation = 5
     TweenService:Create(notif, TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
         Position = UDim2.new(1, -340, 0, 0),
         Rotation = 0,
     }):Play()
-    
     task.spawn(function()
         while notif.Parent and dotStroke.Parent do
             TweenService:Create(dotStroke, TweenInfo.new(0.6), {Transparency = 0.8}):Play()
@@ -230,7 +219,6 @@ local function ShowNotification(title, text, iconColor)
             task.wait(0.6)
         end
     end)
-    
     task.delay(4, function()
         if notif and notif.Parent then
             local outTween = TweenService:Create(notif, TweenInfo.new(0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
@@ -508,22 +496,6 @@ SearchBox.TextXAlignment = Enum.TextXAlignment.Left
 SearchBox.ClearTextOnFocus = false
 SearchBox.Parent = SearchFrame
 
-local SettingsButton = Instance.new("TextButton")
-SettingsButton.Size = UDim2.new(0, 30, 1, 0)
-SettingsButton.Position = UDim2.new(1, -30, 0, 0)
-SettingsButton.BackgroundColor3 = Colors.SearchBar
-SettingsButton.BackgroundTransparency = 0.2
-SettingsButton.BorderSizePixel = 0
-SettingsButton.Text = "+"
-SettingsButton.TextColor3 = Colors.TextDim
-SettingsButton.Font = Enum.Font.GothamBold
-SettingsButton.TextSize = 16
-SettingsButton.Parent = TopBar
-
-local SettingsBtnCorner = Instance.new("UICorner")
-SettingsBtnCorner.CornerRadius = UDim.new(0, 6)
-SettingsBtnCorner.Parent = SettingsButton
-
 local CardsScroll = Instance.new("ScrollingFrame")
 CardsScroll.Name = "CardsScroll"
 CardsScroll.Size = UDim2.new(1, -20, 1, -75)
@@ -593,9 +565,7 @@ local function FetchPlayerData()
     end)
 end
 
-if IS_MM_GAME and GetCurrentPlayerData then
-    FetchPlayerData()
-end
+if IS_MM_GAME and GetCurrentPlayerData then FetchPlayerData() end
 
 if IS_MM_GAME and PlayerDataChanged then
     PlayerDataChanged.OnClientEvent:Connect(function(newData)
@@ -657,9 +627,6 @@ local function GetRoleColor(role)
     end
 end
 
--- ============================================================
--- HERO DETECTION (проверка по инвентарю)
--- ============================================================
 local function IsSheriffDead()
     if not IS_MM_GAME then return false end
     for _, player in pairs(Players:GetPlayers()) do
@@ -706,9 +673,6 @@ local function IsHero(player)
     return true
 end
 
--- ============================================================
--- SEE INVISIBLES
--- ============================================================
 local InvisibleHighlights = {}
 
 local function IsCharacterInvisible(player)
@@ -770,9 +734,6 @@ local function ClearAllInvisibleESP()
     InvisibleHighlights = {}
 end
 
--- ============================================================
--- ESP + NAMETAGS
--- ============================================================
 local ESPHighlights = {}
 local NameTagGuis = {}
 
@@ -895,7 +856,6 @@ local function UpdateAllVisuals()
     end
 end
 
--- Heartbeat для обновления ESP + Nametag ролей + Invisible
 local lastRoleCheck = 0
 RunService.Heartbeat:Connect(function()
     if not Settings.PlayerESP and not Settings.NameTags and not Settings.SeeInvisibles then return end
@@ -1512,7 +1472,7 @@ end
 
 local ParticleParts = {}
 local ParticleConnection = nil
-local PARTICLE_COUNT = 100
+local PARTICLE_COUNT = 60
 local PARTICLE_MIN_DIST = 15
 local PARTICLE_MAX_DIST = 60
 local PARTICLE_RANGE = 80
@@ -1672,9 +1632,8 @@ local function ToggleParticles(enabled)
         ClearParticles()
     end
 end
--- ============================================================
--- AUTO GUN LOOTER (только MM2/MMV)
--- ============================================================
+
+-- AUTO GUN LOOTER
 local GunLooterConnection = nil
 local LastLootTime = 0
 local LOOT_COOLDOWN = 0.15
@@ -1833,9 +1792,7 @@ local function ToggleAutoGunLooter(enabled)
     end
 end
 
--- ============================================================
--- KILL ALL (только MM2/MMV)
--- ============================================================
+-- KILL ALL
 local KillAllRunning = false
 
 local function GetKnifeTool(char)
@@ -1920,9 +1877,7 @@ local function ToggleKillAll(enabled)
     end
 end
 
--- ============================================================
--- CHOOSE MAP 100x (только MM2/MMV)
--- ============================================================
+-- CHOOSE MAP
 local ChooseMapRunning = false
 
 local function FindAllVotePads()
@@ -2344,9 +2299,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ============================================================
--- СИСТЕМА КАРТОЧЕК
--- ============================================================
 local AllCards = {}
 
 local function ApplyCardGradient(card)
@@ -2392,7 +2344,7 @@ local function ApplyLockOverlay(card)
     local lockText = Instance.new("TextLabel")
     lockText.Size = UDim2.new(1, 0, 1, 0)
     lockText.BackgroundTransparency = 1
-    lockText.Text = "🔒 НЕТУ ДОСТУПА"
+    lockText.Text = "🔒 НЕТ ДОСТУПА"
     lockText.TextColor3 = Color3.fromRGB(255, 255, 255)
     lockText.Font = Enum.Font.GothamBlack
     lockText.TextSize = 11
@@ -2607,10 +2559,6 @@ local function CreateBindCard(category, name, callback, accessLevel)
     return card
 end
 
--- ============================================================
--- СОЗДАНИЕ КАРТОЧЕК
--- ============================================================
-
 if IS_MM_GAME then
     CreateCard("Main", "AutoGunLooter", false, ToggleAutoGunLooter, "premium")
     CreateCard("Main", "KillAll", false, ToggleKillAll, "premium")
@@ -2665,7 +2613,6 @@ CreateSliderCard("Visuals", "Aura Type (1=Fire 2=Ice 3=Bolt)", 1, 3, 1, function
 end)
 CreateCard("Visuals", "Particles", false, ToggleParticles)
 
--- ChangeGradient
 CreateSliderCard("Visuals", "ChangeGradient Color1 (1-12)", 1, 12, 7, function(v)
     local idx = math.clamp(math.floor(v), 1, 12)
     Settings.GradientColor1 = idx
@@ -2699,9 +2646,6 @@ CreateBindCard("Binds", "NoClip Key", function(key) Settings.NoClipKey = key end
 CreateBindCard("Binds", "AimBot Key", function(key) Settings.AimBotKey = key end)
 CreateBindCard("Binds", "Lock Mouse Key", function(key) Settings.LockMouseKey = key end)
 
--- ============================================================
--- КАТЕГОРИИ
--- ============================================================
 local CurrentCategory = "Main"
 local CategoryButtons = {}
 
@@ -2831,6 +2775,7 @@ end
 
 ExitButton.MouseButton1Click:Connect(CloseGUI)
 
+-- OpenMode Button (Dev — красный + тёмно-красный перелив)
 local OpenModeButton = Instance.new("TextButton")
 OpenModeButton.Name = "MegolaHub_ToggleButton"
 OpenModeButton.Size = UDim2.new(0, 130, 0, 40)
@@ -2850,15 +2795,15 @@ ombCorner.CornerRadius = UDim.new(0, 10)
 ombCorner.Parent = OpenModeButton
 
 local ombStroke = Instance.new("UIStroke")
-ombStroke.Color = Colors.AccentBlue
+ombStroke.Color = RankColor1
 ombStroke.Thickness = 1.5
 ombStroke.Transparency = 0.2
 ombStroke.Parent = OpenModeButton
 
 local ombGradient = Instance.new("UIGradient")
 ombGradient.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(90, 130, 255)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(160, 90, 255)),
+    ColorSequenceKeypoint.new(0, RankColor1),
+    ColorSequenceKeypoint.new(1, RankColor2),
 })
 ombGradient.Rotation = 0
 ombGradient.Parent = ombStroke
@@ -2878,9 +2823,9 @@ local ombSubLabel = Instance.new("TextLabel")
 ombSubLabel.Size = UDim2.new(1, -20, 0, 12)
 ombSubLabel.Position = UDim2.new(0, 10, 0, 24)
 ombSubLabel.BackgroundTransparency = 1
-ombSubLabel.Text = "• ON •"
-ombSubLabel.TextColor3 = Colors.TextDim
-ombSubLabel.Font = Enum.Font.Gotham
+ombSubLabel.Text = RankName
+ombSubLabel.TextColor3 = RankColor1
+ombSubLabel.Font = Enum.Font.GothamBold
 ombSubLabel.TextSize = 10
 ombSubLabel.TextXAlignment = Enum.TextXAlignment.Center
 ombSubLabel.Parent = OpenModeButton
@@ -2907,12 +2852,12 @@ local function SetOpenMode(mode)
     end
 end
 
+SetOpenMode(Settings.OpenMode)
+
 UserInputService.InputBegan:Connect(function(input, gp)
     if gp then return end
-    if Settings.OpenMode ~= "Button" then
-        if input.KeyCode == Enum.KeyCode.RightShift then
-            if isOpen then CloseGUI() else OpenGUI() end
-        end
+    if Settings.OpenMode == "Key" and input.KeyCode == Enum.KeyCode.RightShift then
+        if isOpen then CloseGUI() else OpenGUI() end
     end
 end)
 
@@ -2920,13 +2865,9 @@ OpenModeButton.MouseButton1Click:Connect(function()
     if isOpen then CloseGUI() else OpenGUI() end
 end)
 
-CreateSliderCard("Visuals", "Open Mode (1=Key 2=Button)", 1, 2, 1, function(v)
+CreateSliderCard("Visuals", "Open Mode (1=Key 2=Button)", 1, 2, 2, function(v)
     local mode = math.clamp(math.floor(v), 1, 2)
-    if mode == 1 then
-        SetOpenMode("Key")
-    else
-        SetOpenMode("Button")
-    end
-end, "admin")
+    SetOpenMode(mode == 1 and "Key" or "Button")
+end)
 
 print("MegolaHub ADMIN загружен! MM-игра: " .. tostring(IS_MM_GAME))
